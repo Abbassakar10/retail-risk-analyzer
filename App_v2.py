@@ -7,12 +7,12 @@ import plotly.express as px
 
 # --- UI SETUP & DISCLAIMER ---
 st.set_page_config(page_title="Dynamic Retail Risk Dashboard", layout="wide")
-st.title("📊Portfolio Risk & Performance Analyzer")
+st.title("📊 Interactive Portfolio Risk & Performance Analyzer")
 
 st.warning("**DISCLAIMER: This platform is strictly for educational and analytical purposes. The outputs provided do not constitute personalized financial, investment, or trading advice. Past performance is not indicative of future results.**")
 
 st.markdown("""
-**Step 1: Enter your assets below.** *Note: The engine will automatically fetch live prices. Add **.NS** for NSE (e.g., `HDFCBANK.NS`) or **.BO** for BSE (e.g., `RELIANCE.BO`).*
+**Step 1: Enter your assets below.** *Note: The engine will automatically fetch the latest market closing prices. Add **.NS** for NSE (e.g., `HDFCBANK.NS`) or **.BO** for BSE (e.g., `RELIANCE.BO`).*
 """)
 
 # --- DYNAMIC TABLE INPUT ---
@@ -41,7 +41,7 @@ timeframe_choice = st.radio(
 )
 
 # --- THE CALCULATIONS ---
-if st.button("Fetch Live Prices & Analyze Portfolio", type="primary"):
+if st.button("Fetch Latest Prices & Analyze Portfolio", type="primary"):
     
     portfolio_df = edited_df.dropna(subset=["Ticker", "Quantity"])
     portfolio_df = portfolio_df[portfolio_df["Quantity"] > 0]
@@ -49,7 +49,7 @@ if st.button("Fetch Live Prices & Analyze Portfolio", type="primary"):
     if portfolio_df.empty:
         st.warning("Please add at least one valid asset with quantity greater than 0.")
     else:
-        with st.spinner("Fetching live market prices and crunching risk models..."):
+        with st.spinner("Fetching latest market prices and crunching risk models..."):
             
             period_str = "1y" if timeframe_choice == "1 Year" else "3y"
             benchmarks = {'^NSEI': 'Nifty 50', '^BSESN': 'BSE Sensex'}
@@ -69,22 +69,21 @@ if st.button("Fetch Live Prices & Analyze Portfolio", type="primary"):
             # --- ERROR HANDLING: CHECK FOR INVALID TICKERS ---
             invalid_tickers = []
             for t in tickers:
-                # If the ticker isn't in the columns or the entire column is empty (NaN)
                 if t not in data.columns or data[t].isna().all():
                     invalid_tickers.append(t)
             
             if invalid_tickers:
                 st.error(f"🚨 **Invalid Ticker(s) Detected:** We could not find market data for **{', '.join(invalid_tickers)}**. Please ensure you are using the correct Yahoo Finance format (e.g., adding '.NS' for NSE stocks or '.BO' for BSE stocks).")
-                st.stop() # This halts the app and prevents the math engine from crashing
+                st.stop()
             
-            # 2. ENRICH THE PORTFOLIO TABLE WITH LIVE DATA
+            # 2. ENRICH THE PORTFOLIO TABLE WITH LATEST DATA
             # Forward-fill any missing prices to prevent weekend/holiday NaN errors
             clean_data = data.ffill().dropna(how='all')
             latest_prices = clean_data.iloc[-1]
             returns = clean_data.pct_change(fill_method=None).dropna()
             
-            portfolio_df['Live Price (₹)'] = portfolio_df['Ticker'].map(latest_prices)
-            portfolio_df['Total Value (₹)'] = portfolio_df['Quantity'] * portfolio_df['Live Price (₹)']
+            portfolio_df['Latest Price (₹)'] = portfolio_df['Ticker'].map(latest_prices)
+            portfolio_df['Total Value (₹)'] = portfolio_df['Quantity'] * portfolio_df['Latest Price (₹)']
             
             # 3. CALCULATE WEIGHTS
             total_value = portfolio_df['Total Value (₹)'].sum()
@@ -92,15 +91,15 @@ if st.button("Fetch Live Prices & Analyze Portfolio", type="primary"):
             weights = portfolio_df["Weight"].to_numpy()
 
             # --- DISPLAY THE ENRICHED TABLE ---
-            st.success("Live prices fetched successfully!")
-            st.subheader("Your Live Portfolio Valuation")
+            st.success("Latest market prices fetched successfully!")
+            st.subheader("Your Current Portfolio Valuation")
             
             st.dataframe(
-                portfolio_df[['Ticker', 'Quantity', 'Live Price (₹)', 'Total Value (₹)']],
+                portfolio_df[['Ticker', 'Quantity', 'Latest Price (₹)', 'Total Value (₹)']],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Live Price (₹)": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Latest Price (₹)": st.column_config.NumberColumn(format="₹%.2f"),
                     "Total Value (₹)": st.column_config.NumberColumn(format="₹%.2f")
                 }
             )
@@ -114,7 +113,6 @@ if st.button("Fetch Live Prices & Analyze Portfolio", type="primary"):
                 st.error(f"⚠️ **Concentration Alert:** Your portfolio is heavily reliant on **{heaviest_asset}**, which makes up **{max_weight*100:.1f}%** of your total wealth. If this single stock underperforms, your entire portfolio suffers. Consider diversifying into broad market Index Funds (like Nifty 50 ETFs) or fixed-income assets to spread your risk.")
             else:
                 st.success("✅ **Diversification Check:** Your assets are reasonably balanced. No single stock dominates more than 40% of your portfolio.")
-
 
             # --- MATH ENGINE ---
             portfolio_returns = returns[tickers]
