@@ -7,7 +7,7 @@ import plotly.express as px
 
 # --- UI SETUP & DISCLAIMER ---
 st.set_page_config(page_title="Dynamic Retail Risk Dashboard", layout="wide")
-st.title("📊 Interactive Portfolio Risk & Performance Analyzer")
+st.title("📊Portfolio Risk & Performance Analyzer")
 
 st.warning("**DISCLAIMER: This platform is strictly for educational and analytical purposes. The outputs provided do not constitute personalized financial, investment, or trading advice. Past performance is not indicative of future results.**")
 
