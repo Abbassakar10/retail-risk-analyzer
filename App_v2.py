@@ -78,8 +78,10 @@ if st.button("Fetch Live Prices & Analyze Portfolio", type="primary"):
                 st.stop() # This halts the app and prevents the math engine from crashing
             
             # 2. ENRICH THE PORTFOLIO TABLE WITH LIVE DATA
-            latest_prices = data.iloc[-1]
-            returns = data.pct_change(fill_method=None).dropna()
+            # Forward-fill any missing prices to prevent weekend/holiday NaN errors
+            clean_data = data.ffill().dropna(how='all')
+            latest_prices = clean_data.iloc[-1]
+            returns = clean_data.pct_change(fill_method=None).dropna()
             
             portfolio_df['Live Price (₹)'] = portfolio_df['Ticker'].map(latest_prices)
             portfolio_df['Total Value (₹)'] = portfolio_df['Quantity'] * portfolio_df['Live Price (₹)']
