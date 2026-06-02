@@ -10,6 +10,7 @@ st.set_page_config(page_title="Simple Portfolio Risk Analyzer", layout="wide", p
 
 st.markdown("""
 <style>
+    /* Boxed Metric Cards */
     div[data-testid="metric-container"] {
         background-color: #1E1E2E;
         border: 1px solid #333344;
@@ -18,8 +19,14 @@ st.markdown("""
         box-shadow: 2px 2px 10px rgba(0,0,0,0.4);
     }
     h1, h2, h3 { color: #E2E2E2 !important; }
-    /* Style the tabs to make them larger and more clickable */
+    
+    /* Make tabs larger and more clickable */
     button[data-baseweb="tab"] { font-size: 18px !important; }
+    
+    /* Shrink metric values so text like "Moderate" fits cleanly */
+    [data-testid="stMetricValue"] {
+        font-size: 1.8rem !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -165,14 +172,14 @@ if st.button("Check My Portfolio Risk", type="primary"):
                 with col2:
                     st.metric("Estimated Next-Year Return", f"{expected_annual_return * 100:.1f}%")
                 with col3:
-                    st.metric("Bumpy Ride Factor", risk_status)
+                    st.metric("Volatility Profile", risk_status)
                 with col4:
                     st.metric("Worst Historic Crash", f"{abs(max_drawdown_pct):.1f}%", delta="Peak-to-Bottom Loss", delta_color="inverse")
                     
                 with st.expander("💡 What do these scores actually mean? (Plain English Guide)"):
                     st.markdown(f"""
                     * **Estimated Next-Year Return:** Based on your settings, your specific combination of stocks is estimated to grow around **{expected_annual_return * 100:.1f}%** over a normal year.
-                    * **Bumpy Ride Factor:** We graded your portfolio's volatility. A **{risk_status}** score means you can expect your account balance to jump around {'a little bit' if vol_pct < 12 else 'a fair amount' if vol_pct < 20 else 'wildly'} from month to month.
+                    * **Volatility Profile:** We graded your portfolio's price swings. A **{risk_status}** score means you can expect your account balance to jump around {'a little bit' if vol_pct < 12 else 'a fair amount' if vol_pct < 20 else 'wildly'} from month to month.
                     * **Worst Historic Crash:** If you had the worst luck possible and bought your portfolio right before a major drop, your account would have temporarily declined by **{abs(max_drawdown_pct):.1f}%** before eventually recovering.
                     """)
 
@@ -217,6 +224,14 @@ if st.button("Check My Portfolio Risk", type="primary"):
                 with tech_col3:
                     sharpe_color = "normal" if sharpe_ratio > 1 else "inverse"
                     st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}", delta="Risk Adjusted", delta_color=sharpe_color)
+                
+                # --- NEW DEEP DIVE EXPLAINER ---
+                with st.expander("💡 Technical Metric Definitions"):
+                    st.markdown("""
+                    * **Exact Annual Volatility:** The statistical standard deviation of your portfolio's daily returns multiplied by the square root of 252 (trading days). It represents the absolute mathematical risk or dispersion of your portfolio's value.
+                    * **Portfolio Beta:** Calculated by dividing the covariance of your portfolio and the broad market (Nifty 50) by the variance of the market. It measures systemic risk—how sensitive your investments are to broad market movements. A beta of exactly 1.0 means perfect correlation with the market.
+                    * **Sharpe Ratio:** Calculated as (Expected Return - Risk-Free Rate) / Annual Volatility. This is the institutional standard for measuring risk-adjusted return. It tells you how much excess return you are generating for every unit of volatility risk you endure.
+                    """)
                 
                 st.markdown("---")
                 st.markdown("##### **Individual Stock Volatility Breakdowns**")
