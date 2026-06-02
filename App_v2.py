@@ -4,11 +4,11 @@ import pandas as pd
 import numpy as np
 from scipy.stats import norm
 import plotly.express as px
-import plotly.graph_objects as go
 
-# --- UI SETUP & CUSTOM CSS ---
-st.set_page_config(page_title="Institutional Risk Engine", layout="wide", page_icon="📈")
+# --- UI SETUP & RETAIL VISUAL STYLING ---
+st.set_page_config(page_title="Simple Portfolio Risk Analyzer", layout="wide", page_icon="📈")
 
+# Inject Custom CSS for clear, clean dashboard cards
 st.markdown("""
 <style>
     div[data-testid="metric-container"] {
@@ -24,32 +24,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Institutional Portfolio Risk Engine")
+st.title("📊 Intuitive Portfolio Risk & Performance Analyzer")
 
-st.warning("**DISCLAIMER: This platform is strictly for educational and analytical purposes. The outputs provided do not constitute personalized financial, investment, or trading advice. Past performance is not indicative of future results.**")
+# COMPLIANCE DISCLAIMER
+st.warning("**DISCLAIMER: This platform is strictly for educational purposes. It does not provide financial, investment, or tax advice. All calculations are estimates based on past market data. Please consult a financial advisor before investing.**")
 
-# --- SIDEBAR MACRO CONTROLS ---
-st.sidebar.header("🛠️ Macroeconomic Model Parameters")
-st.sidebar.markdown("Adjust these variables to alter the forward-looking CAPM valuation model.")
+st.markdown("""
+### **Step 1: Add Your Investments**
+Tell us which stocks you own and how many shares you have. The system will look up the latest market prices for you.
+*To find Indian stocks, add **.NS** for NSE (e.g., `HDFCBANK.NS`, `INFY.NS`) or **.BO** for BSE (e.g., `RELIANCE.BO`).*
+""")
 
-risk_free_slider = st.sidebar.slider(
-    "Risk-Free Rate (%)", 
-    min_value=0.0, max_value=15.0, value=7.0, step=0.1,
-    help="The baseline return of a zero-risk asset, typically backed by government bonds (e.g., Indian 10-Year G-Sec)."
-)
-market_return_slider = st.sidebar.slider(
-    "Expected Market Return (%)", 
-    min_value=5.0, max_value=25.0, value=12.0, step=0.1,
-    help="The annualized forward-looking return expectation for the broad equity index (e.g., Nifty 50)."
-)
-
-# Convert sidebar percentages to decimals for the math backend
-risk_free_rate = risk_free_slider / 100
-expected_market_return = market_return_slider / 100
-equity_risk_premium = expected_market_return - risk_free_rate
-
-# --- MAIN PANEL: PORTFOLIO BUILDER ---
-st.markdown("### **Step 1: Define Portfolio Composition**")
+# --- PORTFOLIO INPUT TABLE ---
 default_data = pd.DataFrame([
     {"Ticker": "RELIANCE.NS", "Quantity": 25},
     {"Ticker": "TCS.NS", "Quantity": 15},
@@ -61,89 +47,107 @@ edited_df = st.data_editor(
     num_rows="dynamic", 
     use_container_width=True,
     column_config={
-        "Ticker": st.column_config.TextColumn("Stock Ticker", required=True),
-        "Quantity": st.column_config.NumberColumn("Quantity", min_value=1, step=1, required=True),
+        "Ticker": st.column_config.TextColumn("Stock Ticker Symbol", required=True),
+        "Quantity": st.column_config.NumberColumn("Number of Shares Owned", min_value=1, step=1, required=True),
     }
 )
 
-timeframe_choice = st.radio(
-    "Select Historical Analysis Timeframe:", 
-    ["1 Year", "3 Years"], 
-    horizontal=True
+st.markdown("---")
+# --- SIDEBAR: SIMPLIFIED ECONOMIC ADJUSTMENTS ---
+st.sidebar.header("⚙️ Market Settings")
+st.sidebar.markdown("We use standard economic estimates to calculate your expected returns. You can tweak them below:")
+
+risk_free_slider = st.sidebar.slider(
+    "Safe Return Rate (Govt Bonds %)", 
+    min_value=0.0, max_value=15.0, value=7.0, step=0.1,
+    help="The guaranteed return you can get from zero-risk fixed deposits or government bonds."
+)
+market_return_slider = st.sidebar.slider(
+    "Expected Stock Market Growth (%)", 
+    min_value=5.0, max_value=25.0, value=12.0, step=0.1,
+    help="The long-term average growth estimate for the overall stock market index (like the Nifty 50)."
 )
 
-# --- THE RISK CORE ---
-if st.button("Fetch Market Metrics & Execute Stress Test", type="primary"):
+risk_free_rate = risk_free_slider / 100
+expected_market_return = market_return_slider / 100
+equity_risk_premium = expected_market_return - risk_free_rate
+
+timeframe_choice = st.radio(
+    "Lookback Period for Analysis:", 
+    ["1 Year", "3 Years"], 
+    horizontal=True,
+    help="Should we look at the last 1 year of price data or the last 3 years to analyze the patterns?"
+)
+
+# --- ENGINE START ---
+if st.button("Check My Portfolio Risk", type="primary"):
     
     portfolio_df = edited_df.dropna(subset=["Ticker", "Quantity"])
     portfolio_df = portfolio_df[portfolio_df["Quantity"] > 0]
     
     if portfolio_df.empty:
-        st.warning("Please populate the asset grid with valid tickers and quantities.")
+        st.warning("Please add at least one stock ticker and enter the number of shares you own.")
     else:
-        with st.spinner("Accessing historical market data and calculating covariance structures..."):
+        with st.spinner("Connecting to market databases and analyzing your stocks..."):
             
             period_str = "1y" if timeframe_choice == "1 Year" else "3y"
             benchmarks = {'^NSEI': 'Nifty 50', '^BSESN': 'BSE Sensex'}
             tickers = portfolio_df["Ticker"].tolist()
 
-            # 1. DOWNLOAD SYSTEM DATA
+            # Download data
             all_tickers = list(set(tickers + list(benchmarks.keys())))
             data = yf.download(all_tickers, period=period_str, progress=False)['Close']
             
-            # --- TICKER COMPLIANCE CHECK ---
+            # Ticker validation checks
             invalid_tickers = [t for t in tickers if t not in data.columns or data[t].isna().all()]
             if invalid_tickers:
-                st.error(f"🚨 **Data Query Failure:** Ticker(s) **{', '.join(invalid_tickers)}** could not be resolved. Please verify formatting suffixes (.NS or .BO).")
+                st.error(f"🔍 **Ticker Error:** We couldn't find data for **{', '.join(invalid_tickers)}**. Please verify that the name matches Yahoo Finance formatting.")
                 st.stop()
             
-            # 2. DATA PROCESSING & CLEANING
+            # Data cleaning
             clean_data = data.ffill().dropna(how='all')
             latest_prices = clean_data.iloc[-1]
             returns = clean_data.pct_change(fill_method=None).dropna()
             
             portfolio_df['Latest Price (₹)'] = portfolio_df['Ticker'].map(latest_prices)
-            portfolio_df['Total Value (₹)'] = portfolio_df['Quantity'] * portfolio_df['Latest Price (₹)']
+            portfolio_df['Total Investment Value (₹)'] = portfolio_df['Quantity'] * portfolio_df['Latest Price (₹)']
             
-            total_value = portfolio_df['Total Value (₹)'].sum()
-            portfolio_df["Weight"] = portfolio_df['Total Value (₹)'] / total_value
-            weights = portfolio_df["Weight"].to_numpy()
+            total_value = portfolio_df['Total Investment Value (₹)'].sum()
+            portfolio_df["Weight (%)"] = (portfolio_df['Total Investment Value (₹)'] / total_value) * 100
+            weights = (portfolio_df["Weight (%)"] / 100).to_numpy()
 
-            st.success("Market price data synchronized.")
-            st.subheader("Current Asset Valuation")
+            st.success("Successfully fetched current prices!")
+            st.subheader("Current Portfolio Snapshot")
             st.dataframe(
-                portfolio_df[['Ticker', 'Quantity', 'Latest Price (₹)', 'Total Value (₹)', 'Weight']],
+                portfolio_df[['Ticker', 'Quantity', 'Latest Price (₹)', 'Total Investment Value (₹)', 'Weight (%)']],
                 use_container_width=True, hide_index=True,
                 column_config={
                     "Latest Price (₹)": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Total Value (₹)": st.column_config.NumberColumn(format="₹%.2f"),
-                    "Weight": st.column_config.NumberColumn(format="%.2f")
+                    "Total Investment Value (₹)": st.column_config.NumberColumn(format="₹%.2f"),
+                    "Weight (%)": st.column_config.NumberColumn(format="%.1f%%")
                 }
             )
 
-            # 3. DIVERSIFICATION AND ASSET ALIGNMENT MATH
-            max_weight = portfolio_df["Weight"].max()
-            heaviest_asset = portfolio_df.loc[portfolio_df["Weight"].idxmax(), "Ticker"]
+            # Concentration Risk Framework
+            max_weight = weights.max()
+            heaviest_asset = portfolio_df.loc[portfolio_df["Weight (%)"].idxmax(), "Ticker"]
 
             st.markdown("---")
             if max_weight > 0.40:
-                st.error(f"⚠️ **Concentration Alert:** Portfolio is heavily reliant on **{heaviest_asset}** ({max_weight*100:.1f}% total allocation). High concentration exposes capital to severe idiosyncratic risk shocks.")
+                st.error(f"⚠️ **Too Many Eggs in One Basket:** **{heaviest_asset}** makes up **{max_weight*100:.1f}%** of your entire portfolio. If something bad happens to this single company, your whole savings could take a major hit. Consider spreading your money into index funds or other sectors.")
             else:
-                st.success("✅ **Concentration Check:** Asset allocation is structurally balanced across current positions (all holdings under 40%).")
+                st.success("✅ **Good Separation:** Your investments are nicely balanced. No single stock dominates more than 40% of your total portfolio value.")
 
-            # --- STATISTICAL ESTIMATION ENGINE ---
+            # Math engine computations
             portfolio_returns = returns[tickers]
             daily_portfolio_returns = portfolio_returns.dot(weights)
-
-            # Calculate Asset Correlation Matrix
             correlation_matrix = portfolio_returns.corr()
 
-            # Volatility Profiling
             individual_volatilities = portfolio_returns.std() * np.sqrt(252) * 100
             vol_df = pd.DataFrame({
                 "Ticker": individual_volatilities.index,
-                "Annual Volatility (%)": individual_volatilities.values
-            }).sort_values(by="Annual Volatility (%)", ascending=True)
+                "Price Swings (Volatility %)": individual_volatilities.values
+            }).sort_values(by="Price Swings (Volatility %)", ascending=True)
 
             cov_matrix = portfolio_returns.cov() * 252
             portfolio_variance = np.dot(weights.T, np.dot(cov_matrix, weights))
@@ -153,102 +157,100 @@ if st.button("Fetch Market Metrics & Execute Stress Test", type="primary"):
             betas = [returns[t].cov(returns['^NSEI']) / nifty_variance for t in tickers]
             portfolio_beta = np.dot(weights, betas)
 
-            # CAPM expected return using the dynamic sidebar values
             expected_annual_return = risk_free_rate + (portfolio_beta * equity_risk_premium)
             sharpe_ratio = (expected_annual_return - risk_free_rate) / portfolio_volatility
 
-            # Parametric VaR
             z_score = norm.ppf(1 - 0.95)
             daily_volatility = portfolio_volatility / np.sqrt(252)
             VaR_30_days = abs(z_score * daily_volatility * np.sqrt(30) * total_value)
 
-            # --- PERFORMANCE BENCHMARKING & DRAWDOWN MATH ---
+            # Benchmark simulation math
             base_investment = 100000
             cumulative_returns = pd.DataFrame(index=returns.index)
             cumulative_returns['Your Portfolio'] = (1 + daily_portfolio_returns).cumprod() * base_investment
-            cumulative_returns['Nifty 50'] = (1 + returns['^NSEI']).cumprod() * base_investment
-            cumulative_returns['BSE Sensex'] = (1 + returns['^BSESN']).cumprod() * base_investment
+            cumulative_returns['Nifty 50 (NSE)'] = (1 + returns['^NSEI']).cumprod() * base_investment
+            cumulative_returns['Sensex (BSE)'] = (1 + returns['^BSESN']).cumprod() * base_investment
             
-            # Maximum Drawdown Derivation
-            # Drawdown = (Current Value - Historical Peak Value) / Historical Peak Value
+            # Maximum Drawdown
             portfolio_peaks = cumulative_returns['Your Portfolio'].cummax()
             portfolio_drawdowns = (cumulative_returns['Your Portfolio'] - portfolio_peaks) / portfolio_peaks
             max_drawdown_pct = portfolio_drawdowns.min() * 100
 
             final_portfolio_val = cumulative_returns['Your Portfolio'].iloc[-1]
-            final_nifty_val = cumulative_returns['Nifty 50'].iloc[-1]
-            final_sensex_val = cumulative_returns['BSE Sensex'].iloc[-1]
+            final_nifty_val = cumulative_returns['Nifty 50 (NSE)'].iloc[-1]
+            final_sensex_val = cumulative_returns['Sensex (BSE)'].iloc[-1]
 
-            # --- DISPLAY DASHBOARD METRICS ---
-            st.subheader("Performance & Risk Summary")
+            # --- DISPLAY USER-FRIENDLY DASHBOARD METRICS ---
+            st.subheader("Your Simple Risk Scorecard")
             col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
-                st.metric("Total Value", f"₹{total_value:,.0f}")
+                st.metric("Total Account Value", f"₹{total_value:,.0f}")
             with col2:
-                st.metric("Expected Return (CAPM)", f"{expected_annual_return * 100:.1f}%", help="Calculated using dynamic macro inputs.")
+                st.metric("Estimated Next-Year Return", f"{expected_annual_return * 100:.1f}%")
             with col3:
-                st.metric("Portfolio Volatility", f"{portfolio_volatility * 100:.1f}%")
+                st.metric("Price Swings (Volatility)", f"{portfolio_volatility * 100:.1f}%")
             with col4:
-                st.metric("Sharpe Ratio", f"{sharpe_ratio:.2f}")
+                st.metric("Market Sensitivity (Beta)", f"{portfolio_beta:.2f}")
             with col5:
-                st.metric("Maximum Drawdown", f"{max_drawdown_pct:.1f}%", delta="Peak-to-Trough Loss", delta_color="inverse")
+                st.metric("Worst Historic Crash", f"{abs(max_drawdown_pct):.1f}%", delta="Peak-to-Bottom Loss", delta_color="inverse")
                 
-            with st.expander("💡 Metric Definitions"):
-                st.markdown("""
-                * **Expected Return (CAPM):** Forward-looking estimate calculated from the formula $E(R_p) = R_f + \\beta_p(E(R_m) - R_f)$ using your custom sidebar variables.
-                * **Sharpe Ratio:** Measures your excess return per unit of volatility. A higher number implies superior risk-adjusted scaling.
-                * **Maximum Drawdown:** The absolute worst peak-to-trough drop observed historically. It reflects the real-world tail pain an investor would have endured by entering the market at the local cyclical peak.
+            # Plain-English Explainer Collapse Panel
+            with st.expander("💡 What do these scores actually mean? (Plain English Guide)"):
+                st.markdown(f"""
+                * **Estimated Next-Year Return:** Based on your settings, if the broad market grows at {market_return_slider}%, your specific combination of stocks is estimated to grow around **{expected_annual_return * 100:.1f}%** over a normal year.
+                * **Price Swings (Volatility):** This tells you how bumpy the ride is. A score of **{portfolio_volatility * 100:.1f}%** means your account value can safely fluctuate up or down by this percentage in a typical year. Higher means a wilder rollercoaster.
+                * **Market Sensitivity (Beta):** A score of **{portfolio_beta:.2f}** means your portfolio is **{'more sensitive' if portfolio_beta > 1 else 'less sensitive'}** than the general stock market. If the Nifty index moves up or down by 10%, your portfolio is expected to move by roughly **{portfolio_beta * 10:.1f}%**.
+                * **Worst Historic Crash:** Over the lookback period selected, if you had bought your portfolio at its absolute highest point right before a major drop, your account would have temporary declined by **{abs(max_drawdown_pct):.1f}%** before recovering.
                 """)
 
-            # --- PERFORMANCE VISUALS ---
+            # --- VISUAL BENCHMARK RACE ---
             st.markdown("---")
-            st.subheader(f"🏃 Historical Growth vs. Benchmarks ({timeframe_choice} Horizon)")
-            st.info("The visualization below models the historical performance trajectory of a base ₹1,00,000 deployment.")
+            st.subheader(f"🏃 The ₹1 Lakh Growth Race ({timeframe_choice} Lookback)")
+            st.info("If you had put exactly ₹1,00,000 into your portfolio, the Nifty index, and the Sensex index back then, here is exactly how much money you would have today:")
             
             race_col1, race_col2, race_col3 = st.columns(3)
             with race_col1:
-                st.metric("Your Custom Portfolio", f"₹{final_portfolio_val:,.0f}", f"{final_portfolio_val - base_investment:+,.0f} PnL")
+                st.metric("Your Portfolio Result", f"₹{final_portfolio_val:,.0f}", f"{final_portfolio_val - base_investment:+,.0f} Growth")
             with race_col2:
-                st.metric("Nifty 50 Index", f"₹{final_nifty_val:,.0f}", f"{final_nifty_val - base_investment:+,.0f} PnL")
+                st.metric("Nifty 50 Tracker", f"₹{final_nifty_val:,.0f}", f"{final_nifty_val - base_investment:+,.0f} Growth")
             with race_col3:
-                st.metric("BSE Sensex Index", f"₹{final_sensex_val:,.0f}", f"{final_sensex_val - base_investment:+,.0f} PnL")
+                st.metric("Sensex Tracker", f"₹{final_sensex_val:,.0f}", f"{final_sensex_val - base_investment:+,.0f} Growth")
             
             fig_line = px.line(
                 cumulative_returns, 
-                labels={'value': 'Portfolio Value (₹)', 'Date': 'Date', 'variable': 'Asset'},
+                labels={'value': 'Account Value (₹)', 'Date': 'Date', 'variable': 'Investment Choice'},
                 color_discrete_sequence=['#00FFA3', '#00B8FF', '#FF3366']
             )
-            fig_line.update_layout(template="plotly_dark", yaxis_title='Value of ₹1,00,000 Base', xaxis_title='')
+            fig_line.update_layout(template="plotly_dark", yaxis_title='Growth of ₹1,00,000 Base', xaxis_title='')
             st.plotly_chart(fig_line, use_container_width=True)
 
-            # --- NEW INTERACTIVE MATRIX SECTION ---
+            # --- CORRELATION AND INDIVIDUAL RISK VISUALS ---
             st.markdown("---")
-            st.subheader("Asset Interactions & Dependency Profiles")
+            st.subheader("Under the Hood: Stock Interactions & Standalone Risk")
             
             matrix_col1, matrix_col2 = st.columns(2)
             
             with matrix_col1:
-                st.markdown("##### **Asset Correlation Heatmap**")
-                # Build an interactive annotated matrix plot
+                st.markdown("##### **Do Your Stocks Move Together? (Co-Movement Table)**")
                 fig_heat = px.imshow(
                     correlation_matrix,
                     text_auto=".2f",
-                    color_continuous_scale="RdBu_r", # Red implies high correlation, Blue implies separation
+                    color_continuous_scale="RdBu_r",
                     zmin=-1.0, zmax=1.0,
-                    labels=dict(color="Correlation Coefficient")
+                    labels=dict(color="Co-Movement Strength")
                 )
                 fig_heat.update_layout(template="plotly_dark", margin=dict(t=10, b=10, l=10, r=10))
                 st.plotly_chart(fig_heat, use_container_width=True)
-                st.caption("Interpret: Higher red clustering indicates co-dependent risk. Broad diversification requires mixing assets with lower or neutral (blue/white) cross-correlation values.")
+                st.caption("How to read: Deep RED square blocks mean the two stocks move in lockstep (high concentration danger). Neutral or BLUE blocks mean they move independently, providing true diversification protection.")
 
             with matrix_col2:
-                st.markdown("##### **Single Asset Volatility Profile**")
+                st.markdown("##### **Individual Stock Bumps (Which asset swings hardest?)**")
                 fig_bar = px.bar(
-                    vol_df, x='Annual Volatility (%)', y='Ticker', orientation='h',
-                    color='Annual Volatility (%)', color_continuous_scale='Reds'
+                    vol_df, x='Price Swings (Volatility %)', y='Ticker', orientation='h',
+                    color='Price Swings (Volatility %)', color_continuous_scale='Reds'
                 )
                 fig_bar.update_layout(template="plotly_dark", margin=dict(t=10, b=10, l=10, r=10))
                 st.plotly_chart(fig_bar, use_container_width=True)
 
             st.markdown("---")
-            st.warning(f"🚨 **95% Value at Risk (VaR):** Under normal conditions, there is a statistical 95% probability that your total portfolio capital exposure will not experience a single 30-day loss exceeding **₹{VaR_30_days:,.0f}**.")
+            st.info(f"🛡️ **Safety Threshold Check:** Based on normal market cycles, there is a 95% mathematical probability that your portfolio value will not drop more than **₹{VaR_30_days:,.0f}** in a single month.")
